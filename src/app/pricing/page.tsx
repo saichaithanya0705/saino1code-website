@@ -22,50 +22,56 @@ import { openRazorpayCheckout, type RazorpayOptions } from '@/lib/razorpay-clien
 const pricingTiers = [
   {
     name: "Starter",
-    price: { monthly: 15, annual: 162 },
+    price: { monthly: 20, annual: 216 },
     // TODO: Replace these with actual Razorpay plan_ids from your Razorpay Dashboard
     priceIds: { monthly: 'plan_starter_monthly', annual: 'plan_starter_annual' },
     description: "For individual developers & small projects.",
     features: [
-      "GLM-4.5 & DeepSeek-V3 models",
-      "Basic RAG search",
-      "5 workspaces",
-      "Single user",
+      "All built-in models",
+      "GLM-4.5, DeepSeek-V3, Qwen-3-Coder",
+      "Advanced RAG + semantic search",
+      "MAGNETO orchestration",
+      "Multi-agent collaboration",
+      "Code generation & refactoring",
+      "Real-time code analysis",
       "1M tokens/month",
     ],
     cta: "Get Started",
   },
   {
     name: "Professional",
-    price: { monthly: 49, annual: 529 },
+    price: { monthly: 50, annual: 540 },
     // TODO: Replace these with actual Razorpay plan_ids from your Razorpay Dashboard
     priceIds: { monthly: 'plan_pro_monthly', annual: 'plan_pro_annual' },
-    description: "For professional developers & teams.",
+    description: "For professional developers & power users.",
     features: [
-      "All built-in models",
-      "Custom API integration",
-      "Advanced RAG + semantic search",
-      "MAGNETO orchestration",
-      "50 workspaces",
-      "Priority support",
+      "Everything in Starter",
       "5M tokens/month",
+      "Custom API integration",
+      "Bring your own API keys",
+      "Priority support",
+      "Advanced context engine",
+      "Deep research capabilities",
+      "Unlimited workspaces",
     ],
     cta: "Get Started",
     popular: true,
   },
   {
     name: "Team",
-    price: { monthly: 99, annual: 1069 },
+    price: { monthly: 100, annual: 1080 },
     // TODO: Replace these with actual Razorpay plan_ids from your Razorpay Dashboard
     priceIds: { monthly: 'plan_team_monthly', annual: 'plan_team_annual' },
     description: "For collaborative teams & organizations.",
     features: [
-      "Everything in Pro",
-      "Real-time collaboration",
-      "Shared context engine",
-      "Team analytics",
-      "Unlimited workspaces",
-      "10M tokens/month/user",
+      "Everything in Professional",
+      "10M tokens/month per user",
+      "Real-time team collaboration",
+      "Shared context & memory",
+      "Team analytics dashboard",
+      "Dedicated support channel",
+      "SSO integration",
+      "Unlimited team members",
     ],
     cta: "Get Started",
   },
@@ -75,13 +81,16 @@ const pricingTiers = [
     priceIds: null,
     description: "For large organizations with custom needs.",
     features: [
+      "Everything in Team",
+      "Custom token allocation",
       "Dedicated infrastructure",
       "Custom model deployment",
-      "SLA guarantees",
+      "99.9% SLA guarantees",
       "White-label options",
       "Enterprise SSO & SOC2",
+      "On-premise deployment option",
     ],
-    cta: "Contact Sales",
+    cta: "Contact Support",
     href: "/contact"
   },
 ];
@@ -92,12 +101,16 @@ const faqs = [
         answer: "Yes! We offer a 7-day free trial on all our plans, giving you access to all advanced features and a 350,000 token allocation to get you started."
     },
     {
+        question: "What's included in the $20 Starter plan?",
+        answer: "The Starter plan includes ALL built-in AI models (GLM-4.5, DeepSeek-V3, Qwen-3-Coder), advanced RAG, semantic search, MAGNETO orchestration, multi-agent collaboration, and 1M tokens/month. It's perfect for individual developers who want full features at an affordable price."
+    },
+    {
         question: "What happens if I go over my token limit?",
         answer: "If you exceed your monthly token allocation, you can choose to either upgrade to a higher plan or purchase additional token packs. We will notify you when you are approaching your limit."
     },
     {
         question: "Can I bring my own API keys?",
-        answer: "Absolutely. The Professional plan and above allow you to integrate your own API keys from providers like OpenAI, Anthropic, Groq, and even local models via Ollama."
+        answer: "Yes! The Professional plan ($50/month) and above allow you to integrate your own API keys from providers like OpenAI, Anthropic, Groq, and even local models via Ollama."
     },
     {
         question: "What is your refund policy?",
