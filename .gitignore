@@ -31,6 +31,9 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 
+# special user config (contains sensitive user IDs)
+src/config/special-user.config.ts
+
 # vercel
 .vercel
 

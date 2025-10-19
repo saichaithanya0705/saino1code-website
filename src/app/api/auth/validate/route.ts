@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createHash } from 'crypto'
+import { SPECIAL_USER_ID, SPECIAL_USER_EMAIL, ENABLE_SPECIAL_USER } from '@/config/special-user.config'
 
 /**
  * API Key Validation Endpoint
@@ -92,16 +93,19 @@ export async function POST(request: NextRequest) {
     // Note: This requires Service Role access, so we use the server client
     const { data: userData } = await supabase.auth.admin.getUserById(keyData.user_id)
 
-    // Check if this is the special admin user (first user in database)
+    // Check if this is the special admin user (configured in special-user.config.ts)
     // This user gets unlimited Pro access
-    const { data: firstUser } = await supabase
-      .from('profiles')
-      .select('id')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .single()
-
-    const isSpecialUser = firstUser && profile.id === firstUser.id
+    let isSpecialUser = false
+    
+    if (ENABLE_SPECIAL_USER) {
+      if (SPECIAL_USER_ID) {
+        // Check by user ID
+        isSpecialUser = profile.id === SPECIAL_USER_ID
+      } else if (SPECIAL_USER_EMAIL && userData?.user?.email) {
+        // Check by email
+        isSpecialUser = userData.user.email.toLowerCase() === SPECIAL_USER_EMAIL.toLowerCase()
+      }
+    }
 
     // Determine user tier based on subscription status or special user status
     let tier = 'individual'
@@ -113,6 +117,7 @@ export async function POST(request: NextRequest) {
       tier = 'professional'
       plan = 'Professional (Unlimited)'
       unlimited = true
+      console.log('🔑 Special user detected:', userData?.user?.email || profile.id)
     } else if (profile.subscription_status === 'active') {
       tier = 'enterprise'
       plan = profile.plan_name || 'Active'
