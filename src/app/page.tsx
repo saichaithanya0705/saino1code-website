@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Bot, Code, Zap } from "lucide-react";
 import Link from "next/link";
+import { StartTrialButton } from "@/components/start-trial-button";
 
 export default function Home() {
   return (
@@ -15,9 +16,7 @@ export default function Home() {
             SaiNo1Code is an enterprise-grade AI coding assistant that supercharges your development workflow with its multi-model brain, massive context windows, and real-time collaboration.
           </p>
           <div className="mt-8 flex justify-center gap-4 flex-wrap">
-            <Button size="lg" asChild>
-              <Link href="/signup">Start Free Trial <ArrowRight className="ml-2 h-5 w-5" /></Link>
-            </Button>
+            <StartTrialButton />
             <Button size="lg" variant="outline" className="text-white border-white hover:bg-white hover:text-slate-900">
               <Link href="/pricing">View Pricing</Link>
             </Button>

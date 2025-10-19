@@ -92,8 +92,34 @@ export async function POST(request: NextRequest) {
     // Note: This requires Service Role access, so we use the server client
     const { data: userData } = await supabase.auth.admin.getUserById(keyData.user_id)
 
-    // Determine user tier based on subscription status
-    const tier = profile.subscription_status === 'active' ? 'enterprise' : 'individual'
+    // Check if this is the special admin user (first user in database)
+    // This user gets unlimited Pro access
+    const { data: firstUser } = await supabase
+      .from('profiles')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single()
+
+    const isSpecialUser = firstUser && profile.id === firstUser.id
+
+    // Determine user tier based on subscription status or special user status
+    let tier = 'individual'
+    let plan = profile.plan_name || 'Free'
+    let unlimited = false
+
+    if (isSpecialUser) {
+      // Special user gets unlimited Pro access
+      tier = 'professional'
+      plan = 'Professional (Unlimited)'
+      unlimited = true
+    } else if (profile.subscription_status === 'active') {
+      tier = 'enterprise'
+      plan = profile.plan_name || 'Active'
+    } else if (profile.subscription_status === 'trial') {
+      tier = 'trial'
+      plan = 'Free Trial'
+    }
 
     // Return validation success with user information
     return NextResponse.json({
@@ -103,8 +129,9 @@ export async function POST(request: NextRequest) {
         email: userData?.user?.email || null,
         full_name: profile.full_name || 'User',
         tier: tier,
-        plan: profile.plan_name || 'Free',
-        subscription_status: profile.subscription_status
+        plan: plan,
+        subscription_status: profile.subscription_status,
+        unlimited: unlimited  // Flag for extension to bypass token limits
       }
     }, {
       status: 200,
