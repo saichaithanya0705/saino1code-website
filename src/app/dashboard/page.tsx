@@ -5,6 +5,7 @@ import { BillingForm } from '@/components/billing-form'
 import { ApiKeyManager } from '@/components/api-key-manager'
 import { CustomProviderKeyManager } from '@/components/custom-provider-key-manager'
 import { DashboardTrialWrapper } from '@/components/dashboard-trial-wrapper'
+import { ProfileCard } from '@/components/profile-card'
 import { regenerateApiKey } from './actions'
 
 export default async function DashboardPage() {
@@ -18,11 +19,14 @@ export default async function DashboardPage() {
     return redirect('/login')
   }
 
-  // Fetch API key and custom provider keys in parallel
-  const [apiKeyRes, customKeysRes] = await Promise.all([
+  // Fetch user profile, API key, and custom provider keys in parallel
+  const [profileRes, apiKeyRes, customKeysRes] = await Promise.all([
+      supabase.from('profiles').select('full_name, subscription_status, plan_name, created_at').eq('id', user.id).maybeSingle(),
       supabase.from('api_keys').select('key_prefix').eq('user_id', user.id).maybeSingle(),
       supabase.from('custom_provider_keys').select('provider_name').eq('user_id', user.id)
   ]);
+
+  const profile = profileRes.data;
 
   let apiKeyPrefix = apiKeyRes.data?.key_prefix || null;
   let initialApiKey: string | null = null;
@@ -48,6 +52,19 @@ export default async function DashboardPage() {
             </p>
           </div>
 
+          {/* Profile Information Card */}
+          <div className="p-6 border rounded-lg">
+            <ProfileCard
+              userId={user.id}
+              email={user.email || 'No email'}
+              fullName={profile?.full_name || null}
+              createdAt={profile?.created_at || user.created_at}
+              subscriptionStatus={profile?.subscription_status || 'inactive'}
+              planName={profile?.plan_name || null}
+            />
+          </div>
+
+          {/* API Keys and Settings */}
           <div className="p-6 border rounded-lg space-y-8">
               <ApiKeyManager apiKeyPrefix={apiKeyPrefix} initialApiKey={initialApiKey} />
               <div className="border-t pt-8">
