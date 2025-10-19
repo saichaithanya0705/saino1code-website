@@ -1,0 +1,134 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { createHash } from 'crypto'
+
+/**
+ * API Key Validation Endpoint
+ * 
+ * This endpoint validates API keys generated from the dashboard
+ * and returns user information for the VS Code extension.
+ * 
+ * Request:
+ *   POST /api/auth/validate
+ *   Headers: Authorization: Bearer s1c_...
+ * 
+ * Response:
+ *   Success: { valid: true, user: { id, email, full_name, tier, plan } }
+ *   Error: { error: string }
+ */
+export async function POST(request: NextRequest) {
+  try {
+    // Extract API key from Authorization header
+    const authHeader = request.headers.get('authorization')
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Missing or invalid authorization header. Expected: Authorization: Bearer s1c_...' },
+        { status: 401 }
+      )
+    }
+
+    const apiKey = authHeader.slice(7) // Remove 'Bearer ' prefix
+
+    // Validate API key format
+    if (!apiKey.startsWith('s1c_')) {
+      return NextResponse.json(
+        { error: 'Invalid API key format. API keys must start with s1c_' },
+        { status: 401 }
+      )
+    }
+
+    // Hash the provided API key (same method used during generation)
+    const hashedKey = createHash('sha256').update(apiKey).digest('hex')
+
+    // Create Supabase client
+    const supabase = createClient()
+
+    // Look up the API key in the database
+    const { data: keyData, error: keyError } = await supabase
+      .from('api_keys')
+      .select('user_id')
+      .eq('hashed_key', hashedKey)
+      .maybeSingle()
+
+    if (keyError) {
+      console.error('Database error looking up API key:', keyError)
+      return NextResponse.json(
+        { error: 'Database error during validation' },
+        { status: 500 }
+      )
+    }
+
+    if (!keyData) {
+      return NextResponse.json(
+        { error: 'Invalid API key. Please check your key or generate a new one from the dashboard.' },
+        { status: 401 }
+      )
+    }
+
+    // Fetch user profile information
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, subscription_status, plan_name')
+      .eq('id', keyData.user_id)
+      .single()
+
+    if (profileError) {
+      console.error('Database error fetching profile:', profileError)
+      return NextResponse.json(
+        { error: 'Error fetching user profile' },
+        { status: 500 }
+      )
+    }
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: 'User profile not found' },
+        { status: 404 }
+      )
+    }
+
+    // Fetch user email from auth.users
+    // Note: This requires Service Role access, so we use the server client
+    const { data: userData } = await supabase.auth.admin.getUserById(keyData.user_id)
+
+    // Determine user tier based on subscription status
+    const tier = profile.subscription_status === 'active' ? 'enterprise' : 'individual'
+
+    // Return validation success with user information
+    return NextResponse.json({
+      valid: true,
+      user: {
+        id: profile.id,
+        email: userData?.user?.email || null,
+        full_name: profile.full_name || 'User',
+        tier: tier,
+        plan: profile.plan_name || 'Free',
+        subscription_status: profile.subscription_status
+      }
+    }, {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store', // Don't cache validation responses
+      }
+    })
+
+  } catch (error) {
+    console.error('Unexpected error in API key validation:', error)
+    return NextResponse.json(
+      { error: 'Internal server error during validation' },
+      { status: 500 }
+    )
+  }
+}
+
+// Handle OPTIONS request for CORS (if needed)
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    }
+  })
+}
