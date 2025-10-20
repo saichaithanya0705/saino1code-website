@@ -98,18 +98,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch user profile information from profiles table
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('subscription_status, plan_name')
-      .eq('id', keyData.user_id)
-      .maybeSingle()
+    // Note: profiles table might not exist yet, so we handle errors gracefully
+    let profile = null
+    let profileError = null
+    
+    try {
+      const result = await supabase
+        .from('profiles')
+        .select('subscription_status, plan_name, unlimited_access, has_lifetime_access')
+        .eq('id', keyData.user_id)
+        .maybeSingle()
+      
+      profile = result.data
+      profileError = result.error
+    } catch (err) {
+      console.warn('Profiles table might not exist yet:', err)
+      // Continue without profile data
+    }
 
-    if (profileError) {
+    if (profileError && profileError.code !== 'PGRST116') {
+      // PGRST116 is "table not found" - that's okay, we'll use fallback
+      // Other errors are real problems
       console.error('Database error fetching profile:', profileError)
-      return NextResponse.json(
-        { error: 'Error fetching user profile' },
-        { status: 500 }
-      )
     }
 
     // Fetch user tier information from user_tiers table (fallback if profiles not set)
@@ -127,6 +137,8 @@ export async function POST(request: NextRequest) {
     const userTier = tierData?.tier || 'free'
     const subscriptionStatus = profile?.subscription_status || 'inactive'
     const planName = profile?.plan_name || 'Free'
+    const unlimitedAccess = profile?.unlimited_access || false
+    const hasLifetimeAccess = profile?.has_lifetime_access || false
 
     // Fetch user email from auth.users
     // Note: This requires Service Role access, so we use the server client
@@ -149,16 +161,16 @@ export async function POST(request: NextRequest) {
     // Determine user tier and plan based on profiles table or special user status
     let tier = 'individual'
     let plan = planName
-    let unlimited = false
+    let unlimited = unlimitedAccess // Use profile's unlimited_access flag
     let finalSubscriptionStatus = subscriptionStatus
 
-    if (isSpecialUser) {
-      // Special user gets unlimited Pro access
+    if (isSpecialUser || unlimitedAccess || hasLifetimeAccess) {
+      // Special user or user with unlimited access from profiles table
       tier = 'professional'
-      plan = 'Professional (Unlimited)'
+      plan = planName || 'Professional (Unlimited)'
       unlimited = true
       finalSubscriptionStatus = 'active'
-      console.log('🔑 Special user detected:', userData?.user?.email || keyData.user_id)
+      console.log('🔑 Special/Unlimited user detected:', userData?.user?.email || keyData.user_id)
     } else if (subscriptionStatus === 'active') {
       // Active subscription from profiles table
       if (userTier === 'professional' || planName?.includes('Professional')) {
