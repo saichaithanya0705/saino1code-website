@@ -74,11 +74,12 @@ export async function POST(request: NextRequest) {
     // Create Supabase client
     const supabase = createClient()
 
-    // Look up the API key in the database
+    // Look up the API key in the database (only active keys)
     const { data: keyData, error: keyError } = await supabase
       .from('api_keys')
       .select('user_id')
       .eq('hashed_key', hashedKey)
+      .eq('is_active', true)  // Only match active keys
       .maybeSingle()
 
     if (keyError) {
@@ -96,27 +97,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch user profile information
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, full_name, subscription_status, plan_name')
-      .eq('id', keyData.user_id)
-      .single()
+    // Fetch user tier information from user_tiers table
+    const { data: tierData, error: tierError } = await supabase
+      .from('user_tiers')
+      .select('tier')
+      .eq('user_id', keyData.user_id)
+      .maybeSingle()
 
-    if (profileError) {
-      console.error('Database error fetching profile:', profileError)
+    if (tierError) {
+      console.error('Database error fetching user tier:', tierError)
       return NextResponse.json(
-        { error: 'Error fetching user profile' },
+        { error: 'Error fetching user tier' },
         { status: 500 }
       )
     }
 
-    if (!profile) {
-      return NextResponse.json(
-        { error: 'User profile not found' },
-        { status: 404 }
-      )
-    }
+    // Default to 'free' if no tier is set
+    const userTier = tierData?.tier || 'free'
 
     // Fetch user email from auth.users
     // Note: This requires Service Role access, so we use the server client
@@ -129,42 +126,50 @@ export async function POST(request: NextRequest) {
     if (ENABLE_SPECIAL_USER) {
       if (SPECIAL_USER_ID) {
         // Check by user ID
-        isSpecialUser = profile.id === SPECIAL_USER_ID
+        isSpecialUser = keyData.user_id === SPECIAL_USER_ID
       } else if (SPECIAL_USER_EMAIL && userData?.user?.email) {
         // Check by email
         isSpecialUser = userData.user.email.toLowerCase() === SPECIAL_USER_EMAIL.toLowerCase()
       }
     }
 
-    // Determine user tier based on subscription status or special user status
+    // Determine user tier and plan based on user_tiers table or special user status
     let tier = 'individual'
-    let plan = profile.plan_name || 'Free'
+    let plan = 'Free'
     let unlimited = false
+    let subscription_status = 'inactive'
 
     if (isSpecialUser) {
       // Special user gets unlimited Pro access
       tier = 'professional'
       plan = 'Professional (Unlimited)'
       unlimited = true
-      console.log('🔑 Special user detected:', userData?.user?.email || profile.id)
-    } else if (profile.subscription_status === 'active') {
+      subscription_status = 'active'
+      console.log('🔑 Special user detected:', userData?.user?.email || keyData.user_id)
+    } else if (userTier === 'professional') {
+      tier = 'professional'
+      plan = 'Professional'
+      subscription_status = 'active'
+    } else if (userTier === 'enterprise') {
       tier = 'enterprise'
-      plan = profile.plan_name || 'Active'
-    } else if (profile.subscription_status === 'trial') {
-      tier = 'trial'
-      plan = 'Free Trial'
+      plan = 'Enterprise'
+      subscription_status = 'active'
+    } else if (userTier === 'free') {
+      tier = 'individual'
+      plan = 'Free'
+      subscription_status = 'inactive'
     }
 
     // Return validation success with user information
     return NextResponse.json({
       valid: true,
       user: {
-        id: profile.id,
+        id: keyData.user_id,
         email: userData?.user?.email || null,
-        full_name: profile.full_name || 'User',
+        full_name: userData?.user?.user_metadata?.full_name || userData?.user?.email?.split('@')[0] || 'User',
         tier: tier,
         plan: plan,
-        subscription_status: profile.subscription_status,
+        subscription_status: subscription_status,
         unlimited: unlimited  // Flag for extension to bypass token limits
       }
     }, {
