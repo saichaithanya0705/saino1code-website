@@ -6,6 +6,19 @@ import { createHash } from 'crypto'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// Type definitions for RPC function returns
+type ShouldGenerateResult = {
+  should_generate: boolean
+  reason: string
+  active_key_count: number
+  last_generated_seconds_ago: number | null
+}
+
+type KeyGenerationResult = {
+  was_generated: boolean
+  message: string
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
@@ -23,24 +36,73 @@ export async function GET(request: Request) {
     // If this is a VS Code callback, generate API key and redirect
     if (isVSCodeCallback && data?.user) {
       try {
-        console.log('🔵 VS Code callback detected, generating API key...')
+        console.log('🔵 VS Code callback detected, checking if should generate API key...')
+        
+        // Check if user already has a recent key (prevents duplicate generation)
+        const { data: shouldGenerateDataRaw, error: checkError } = await supabase
+          .rpc('should_generate_new_key', { p_cooldown_minutes: 5 })
+          .single()
+        
+        if (checkError) {
+          console.warn('⚠️  Could not check key status:', checkError)
+          // Continue anyway - will try to generate
+        }
+
+        const shouldGenerateData = shouldGenerateDataRaw as ShouldGenerateResult | null
+
+        if (shouldGenerateData && !shouldGenerateData.should_generate) {
+          // User has a recent key - don't generate new one
+          console.log(`ℹ️  ${shouldGenerateData.reason}`)
+          console.log(`   Active keys: ${shouldGenerateData.active_key_count}`)
+          console.log(`   Last generated: ${shouldGenerateData.last_generated_seconds_ago}s ago`)
+          
+          // Show user-friendly message
+          const waitSeconds = (5 * 60) - (shouldGenerateData.last_generated_seconds_ago || 0)
+          const waitMinutes = Math.ceil(waitSeconds / 60)
+          
+          return NextResponse.redirect(
+            `${requestUrl.origin}/login?` +
+            `error=recent_key_exists&` +
+            `wait=${waitMinutes}&` +
+            `callback=vscode`
+          )
+        }
+        
+        console.log('✅ Generating new API key...')
         
         // Generate API key using smart_generate_api_key (keeps up to 3 active keys)
         const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
         const keyPrefix = 'sk_' // Just the prefix, not part of the random key
         const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
-        // Use smart_generate_api_key which keeps up to 3 keys active
-        const { error: keyError } = await supabase.rpc('smart_generate_api_key', {
-          p_key_prefix: keyPrefix,
-          p_hashed_key: hashedKey,
-          p_max_active_keys: 3
-        })
+        // Use smart_generate_api_key which now returns success status
+        const { data: keyResultRaw, error: keyError } = await supabase
+          .rpc('smart_generate_api_key', {
+            p_key_prefix: keyPrefix,
+            p_hashed_key: hashedKey,
+            p_max_active_keys: 3
+          })
+          .single()
 
         if (keyError) {
           console.error('❌ Failed to generate API key:', keyError)
           return NextResponse.redirect(`${requestUrl.origin}/login?error=api_key_failed&callback=vscode`)
         }
+
+        const keyResult = keyResultRaw as KeyGenerationResult | null
+
+        // Check if key was actually generated
+        if (keyResult && !keyResult.was_generated) {
+          console.log(`ℹ️  Key not generated: ${keyResult.message}`)
+          return NextResponse.redirect(
+            `${requestUrl.origin}/login?` +
+            `error=key_not_generated&` +
+            `message=${encodeURIComponent(keyResult.message)}&` +
+            `callback=vscode`
+          )
+        }
+
+        console.log('✅ API key generated successfully')
 
         // Get user tier with graceful fallback
         let tier = 'individual'

@@ -47,25 +47,57 @@ function LoginForm() {
     try {
       console.log('🔵 Handling VS Code redirect for user:', email)
       
-      // Generate API key using smart_generate_api_key (keeps up to 3 active keys)
-      // This prevents revoking keys on every login
-      console.log('🔵 Generating API key (keeps existing keys active)...')
+      // Check if user already has a recent key (prevents duplicate generation during testing)
+      console.log('🔍 Checking if should generate new API key...')
+      const { data: shouldGenerateRaw, error: checkError } = await supabase
+        .rpc('should_generate_new_key', { p_cooldown_minutes: 5 })
+        .maybeSingle()
+      
+      if (checkError) {
+        console.warn('⚠️  Could not check key status:', checkError)
+        // Continue anyway
+      }
+
+      const shouldGenerate = shouldGenerateRaw as any
+
+      if (shouldGenerate && !shouldGenerate.should_generate) {
+        // User has a recent key
+        console.log(`ℹ️  ${shouldGenerate.reason}`)
+        console.log(`   Active keys: ${shouldGenerate.active_key_count}`)
+        console.log(`   Last generated: ${shouldGenerate.last_generated_seconds_ago}s ago`)
+        
+        const waitMinutes = Math.ceil((300 - (shouldGenerate.last_generated_seconds_ago || 0)) / 60)
+        setError(`You generated an API key ${shouldGenerate.last_generated_seconds_ago} seconds ago. Please wait ${waitMinutes} more minute(s) before generating another key, or use your existing key from the extension.`)
+        return
+      }
+
+      console.log('✅ Generating new API key...')
       const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
       const keyPrefix = 'sk_' // Just the prefix, not part of the random key
       const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
       // Use smart_generate_api_key which keeps up to 3 keys active
-      const { error: keyError } = await supabase.rpc('smart_generate_api_key', {
+      const { data: keyResultRaw, error: keyError } = await supabase.rpc('smart_generate_api_key', {
         p_key_prefix: keyPrefix,
         p_hashed_key: hashedKey,
         p_max_active_keys: 3
-      })
+      }).maybeSingle()
 
       if (keyError) {
         console.error('❌ Failed to generate API key:', keyError)
         setError('Failed to generate API key. Please try again.')
         return
       }
+
+      const keyResult = keyResultRaw as any
+
+      if (keyResult && !keyResult.was_generated) {
+        console.log(`ℹ️  Key not generated: ${keyResult.message}`)
+        setError(keyResult.message)
+        return
+      }
+
+      console.log('✅ API key generated successfully')
 
       // Get user tier with graceful fallback
       let tier = 'individual'
