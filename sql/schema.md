@@ -4,63 +4,96 @@ Please execute the following SQL commands in your Supabase SQL Editor to create 
 
 ## 1. Profiles Table
 
-This table stores user-specific public data and is linked to the `auth.users` table. It's used to store Razorpay customer and subscription information along with other public profile data.
+This table stores user-specific public data and is linked to the `auth.users` table. It's used for user information, subscription management, and payment integration.
 
-**Important:** This table is required for the Razorpay payment integration to work correctly.
+**Important:** This table is required for user management, subscription tracking, and payment integration.
+
+**Schema:** Enhanced version with subscription status, billing information, and payment provider support.
 
 ```sql
 -- Create a table for public user profiles
-create table profiles (
-  id uuid references auth.users not null primary key,
-  updated_at timestamp with time zone,
-  full_name text,
-  avatar_url text,
-  -- Razorpay customer and subscription info
-  razorpay_customer_id text,
-  razorpay_subscription_id text,
-  razorpay_plan_id text,
-  razorpay_current_period_start timestamp with time zone,
-  razorpay_current_period_end timestamp with time zone,
-  subscription_status text default 'inactive',
-  last_payment_id text,
-  last_payment_amount numeric,
-  last_payment_date timestamp with time zone,
-  plan_name text
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name TEXT,
+  avatar_url TEXT,
+  
+  -- Subscription Information
+  subscription_status TEXT DEFAULT 'inactive' CHECK (subscription_status IN ('inactive', 'active', 'trial', 'cancelled')),
+  plan_name TEXT DEFAULT 'Free',
+  billing_cycle TEXT CHECK (billing_cycle IN ('monthly', 'yearly', NULL)),
+  subscription_start_date TIMESTAMPTZ,
+  subscription_end_date TIMESTAMPTZ,
+  
+  -- Stripe Integration (if needed in future)
+  stripe_customer_id TEXT,
+  
+  -- Razorpay Integration (existing)
+  razorpay_customer_id TEXT,
+  razorpay_subscription_id TEXT,
+  razorpay_plan_id TEXT,
+  razorpay_current_period_start TIMESTAMPTZ,
+  razorpay_current_period_end TIMESTAMPTZ,
+  last_payment_id TEXT,
+  last_payment_amount NUMERIC,
+  last_payment_date TIMESTAMPTZ,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Create indexes for faster lookups
-create index idx_razorpay_subscription_id on profiles(razorpay_subscription_id);
-create index idx_razorpay_customer_id on profiles(razorpay_customer_id);
-create index idx_subscription_status on profiles(subscription_status);
+CREATE INDEX IF NOT EXISTS idx_profiles_subscription_status ON profiles(subscription_status);
+CREATE INDEX IF NOT EXISTS idx_profiles_plan_name ON profiles(plan_name);
+CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer_id ON profiles(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_razorpay_subscription_id ON profiles(razorpay_subscription_id);
+CREATE INDEX IF NOT EXISTS idx_razorpay_customer_id ON profiles(razorpay_customer_id);
 
 -- Set up Row Level Security (RLS)
 -- See https://supabase.com/docs/guides/auth/row-level-security
-alter table profiles
-  enable row level security;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-create policy "Public profiles are viewable by everyone." on profiles
-  for select using (true);
+-- Create indexes for performance
+CREATE INDEX idx_profiles_subscription_status ON profiles(subscription_status);
+CREATE INDEX idx_profiles_plan_name ON profiles(plan_name);
+CREATE INDEX idx_profiles_stripe_customer_id ON profiles(stripe_customer_id);
 
-create policy "Users can insert their own profile." on profiles
-  for insert with check (auth.uid() = id);
+-- Enable Row Level Security
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can update own profile." on profiles
-  for update using (auth.uid() = id);
+-- RLS Policies for profiles
+CREATE POLICY "Users can view own profile"
+  ON profiles FOR SELECT
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile"
+  ON profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
 
 -- This trigger automatically creates a profile entry when a new user signs up.
 -- See https://supabase.com/docs/guides/auth/managing-user-data#using-triggers
-create function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, full_name, avatar_url)
-  values (new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
-  return new;
-end;
-$$ language plpgsql security definer;
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, subscription_status, plan_name)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+    'inactive',
+    'Free'
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 ```
 

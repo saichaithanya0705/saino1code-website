@@ -97,7 +97,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch user tier information from user_tiers table
+    // Fetch user profile information from profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('subscription_status, plan_name')
+      .eq('id', keyData.user_id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Database error fetching profile:', profileError)
+      return NextResponse.json(
+        { error: 'Error fetching user profile' },
+        { status: 500 }
+      )
+    }
+
+    // Fetch user tier information from user_tiers table (fallback if profiles not set)
     const { data: tierData, error: tierError } = await supabase
       .from('user_tiers')
       .select('tier')
@@ -106,14 +121,12 @@ export async function POST(request: NextRequest) {
 
     if (tierError) {
       console.error('Database error fetching user tier:', tierError)
-      return NextResponse.json(
-        { error: 'Error fetching user tier' },
-        { status: 500 }
-      )
     }
 
-    // Default to 'free' if no tier is set
+    // Use profile data if available, otherwise fall back to tier data
     const userTier = tierData?.tier || 'free'
+    const subscriptionStatus = profile?.subscription_status || 'inactive'
+    const planName = profile?.plan_name || 'Free'
 
     // Fetch user email from auth.users
     // Note: This requires Service Role access, so we use the server client
@@ -133,31 +146,48 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine user tier and plan based on user_tiers table or special user status
+    // Determine user tier and plan based on profiles table or special user status
     let tier = 'individual'
-    let plan = 'Free'
+    let plan = planName
     let unlimited = false
-    let subscription_status = 'inactive'
+    let finalSubscriptionStatus = subscriptionStatus
 
     if (isSpecialUser) {
       // Special user gets unlimited Pro access
       tier = 'professional'
       plan = 'Professional (Unlimited)'
       unlimited = true
-      subscription_status = 'active'
+      finalSubscriptionStatus = 'active'
       console.log('🔑 Special user detected:', userData?.user?.email || keyData.user_id)
+    } else if (subscriptionStatus === 'active') {
+      // Active subscription from profiles table
+      if (userTier === 'professional' || planName?.includes('Professional')) {
+        tier = 'professional'
+        plan = planName || 'Professional'
+      } else if (userTier === 'enterprise' || planName?.includes('Enterprise')) {
+        tier = 'enterprise'
+        plan = planName || 'Enterprise'
+      } else {
+        tier = 'professional' // Default for active subscriptions
+        plan = planName || 'Professional'
+      }
+    } else if (subscriptionStatus === 'trial') {
+      tier = 'trial'
+      plan = planName || 'Free Trial'
     } else if (userTier === 'professional') {
+      // Fallback to user_tiers if profiles not set
       tier = 'professional'
       plan = 'Professional'
-      subscription_status = 'active'
+      finalSubscriptionStatus = 'active'
     } else if (userTier === 'enterprise') {
       tier = 'enterprise'
       plan = 'Enterprise'
-      subscription_status = 'active'
-    } else if (userTier === 'free') {
+      finalSubscriptionStatus = 'active'
+    } else {
+      // Free tier
       tier = 'individual'
       plan = 'Free'
-      subscription_status = 'inactive'
+      finalSubscriptionStatus = 'inactive'
     }
 
     // Return validation success with user information
@@ -169,7 +199,7 @@ export async function POST(request: NextRequest) {
         full_name: userData?.user?.user_metadata?.full_name || userData?.user?.email?.split('@')[0] || 'User',
         tier: tier,
         plan: plan,
-        subscription_status: subscription_status,
+        subscription_status: finalSubscriptionStatus,
         unlimited: unlimited  // Flag for extension to bypass token limits
       }
     }, {
