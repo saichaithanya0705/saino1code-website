@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createHash } from 'crypto'
-import { SPECIAL_USER_ID, SPECIAL_USER_EMAIL, ENABLE_SPECIAL_USER } from '@/config/special-user.config'
 
 // Mark this route as dynamic - it validates API keys dynamically
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+// Load special user config with fallback to environment variables
+// This allows the app to work on Netlify even if config file is gitignored
+let SPECIAL_USER_ID: string | null = null
+let SPECIAL_USER_EMAIL: string | null = null
+let ENABLE_SPECIAL_USER: boolean = false
+
+try {
+  // Try to import the config file (will work locally if file exists)
+  const config = require('@/config/special-user.config')
+  SPECIAL_USER_ID = config.SPECIAL_USER_ID
+  SPECIAL_USER_EMAIL = config.SPECIAL_USER_EMAIL
+  ENABLE_SPECIAL_USER = config.ENABLE_SPECIAL_USER
+} catch {
+  // Config file doesn't exist, use environment variables instead
+  SPECIAL_USER_ID = process.env.SPECIAL_USER_ID || null
+  SPECIAL_USER_EMAIL = process.env.SPECIAL_USER_EMAIL || null
+  ENABLE_SPECIAL_USER = process.env.ENABLE_SPECIAL_USER === 'true'
+}
 
 /**
  * API Key Validation Endpoint
