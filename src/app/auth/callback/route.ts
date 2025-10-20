@@ -27,7 +27,7 @@ export async function GET(request: Request) {
         
         // Generate API key
         const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-        const keyPrefix = apiKey.slice(0, 8)
+        const keyPrefix = 'sk_' // Just the prefix, not part of the random key
         const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
         // Store/update API key

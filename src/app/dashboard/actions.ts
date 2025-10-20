@@ -18,7 +18,7 @@ export async function regenerateApiKey() {
 
   // Generate a new API key (sk_ prefix for SaiNo1Code)
   const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-  const keyPrefix = apiKey.slice(0, 5) // sk_ is 3 chars, but we store 5 to be consistent
+  const keyPrefix = 'sk_' // Just the prefix, not part of the random key
 
   // Hash the key for secure storage
   const hashedKey = createHash('sha256').update(apiKey).digest('hex')

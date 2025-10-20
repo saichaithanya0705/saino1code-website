@@ -58,7 +58,7 @@ function LoginForm() {
         // Generate new API key
         console.log('🔵 No API key found, generating new one...')
         apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-        const keyPrefix = apiKey.slice(0, 8)
+        const keyPrefix = 'sk_' // Just the prefix, not part of the random key
         const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
         // Store the API key
@@ -77,7 +77,7 @@ function LoginForm() {
         // Since we only store the hash, we need to generate a new one
         console.log('🔵 User has existing API key, generating new one for security...')
         apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-        const keyPrefix = apiKey.slice(0, 8)
+        const keyPrefix = 'sk_' // Just the prefix, not part of the random key
         const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
         const { error: updateError } = await supabase.rpc('transactional_regenerate_api_key', {
