@@ -7,6 +7,8 @@ import { createHash } from "crypto"
 /**
  * Revokes any existing API key for the user and generates a new one transactionally.
  * Ensures a user has only one primary API key at a time.
+ * 
+ * IMPORTANT: This DEACTIVATES all old keys. Use generateApiKey() for non-destructive generation.
  */
 export async function regenerateApiKey() {
   const supabase = createClient()
@@ -24,13 +26,54 @@ export async function regenerateApiKey() {
   const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
   // Call the transactional database function to regenerate the key
+  // This will deactivate ALL existing keys
   const { error } = await supabase.rpc('transactional_regenerate_api_key', {
     p_key_prefix: keyPrefix,
     p_hashed_key: hashedKey,
+    p_deactivate_old: true, // Explicitly deactivate old keys
   })
 
   if (error) {
     console.error("Error regenerating API key transactionally:", error)
+    throw new Error("Could not generate API key.")
+  }
+
+  revalidatePath('/dashboard')
+
+  // Return the full key to be displayed to the user ONCE.
+  return { newApiKey: apiKey }
+}
+
+/**
+ * Generates a new API key WITHOUT deactivating existing keys.
+ * Allows users to have multiple active keys for different devices.
+ * Automatically manages key lifecycle (keeps up to 3 active keys).
+ */
+export async function generateApiKey() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error("User not authenticated")
+  }
+
+  // Generate a new API key (sk_ prefix for SaiNo1Code)
+  const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
+  const keyPrefix = 'sk_'
+
+  // Hash the key for secure storage
+  const hashedKey = createHash('sha256').update(apiKey).digest('hex')
+
+  // Use smart function that keeps up to 3 active keys
+  // This won't break existing keys in VS Code extension
+  const { error } = await supabase.rpc('smart_generate_api_key', {
+    p_key_prefix: keyPrefix,
+    p_hashed_key: hashedKey,
+    p_max_active_keys: 3, // Allow up to 3 active keys
+  })
+
+  if (error) {
+    console.error("Error generating API key:", error)
     throw new Error("Could not generate API key.")
   }
 

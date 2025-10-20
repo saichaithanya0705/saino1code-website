@@ -6,7 +6,7 @@ import { ApiKeyManager } from '@/components/api-key-manager'
 import { CustomProviderKeyManager } from '@/components/custom-provider-key-manager'
 import { DashboardTrialWrapper } from '@/components/dashboard-trial-wrapper'
 import { ProfileCard } from '@/components/profile-card'
-import { regenerateApiKey } from './actions'
+import { regenerateApiKey, generateApiKey } from './actions'
 
 // Mark this page as dynamic - it uses cookies for authentication
 export const dynamic = 'force-dynamic'
@@ -36,8 +36,9 @@ export default async function DashboardPage() {
   let initialApiKey: string | null = null;
 
   // If user has no API key, generate one for them on their first visit.
+  // Use generateApiKey (not regenerateApiKey) to avoid deactivating existing keys
   if (!apiKeyPrefix) {
-      const { newApiKey } = await regenerateApiKey();
+      const { newApiKey } = await generateApiKey();
       initialApiKey = newApiKey;
       // Manually set the prefix for the initial render to avoid a layout shift
       apiKeyPrefix = newApiKey.slice(0, 6);
