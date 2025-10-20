@@ -1,27 +1,13 @@
 [build]
   command = "npm run build"
   publish = ".next"
-  base = ""
 
 [build.environment]
   NODE_VERSION = "18"
-  NPM_FLAGS = "--legacy-peer-deps"
 
 # Essential Next.js Plugin for Netlify
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-
-# Redirect API routes to serverless functions
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-# SPA fallback for Next.js routing
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 # Security headers
 [[headers]]
