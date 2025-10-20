@@ -47,10 +47,10 @@ function LoginForm() {
     try {
       console.log('🔵 Handling VS Code redirect for user:', email)
       
-      // Check if user already has a recent key (prevents duplicate generation during testing)
-      console.log('🔍 Checking if should generate new API key...')
+      // Check if user already has any active keys
+      console.log('🔍 Checking if user needs API key...')
       const { data: shouldGenerateRaw, error: checkError } = await supabase
-        .rpc('should_generate_new_key', { p_cooldown_minutes: 5 })
+        .rpc('should_generate_new_key')
         .maybeSingle()
       
       if (checkError) {
@@ -61,17 +61,15 @@ function LoginForm() {
       const shouldGenerate = shouldGenerateRaw as any
 
       if (shouldGenerate && !shouldGenerate.should_generate) {
-        // User has a recent key
+        // User already has active keys - don't generate new one
         console.log(`ℹ️  ${shouldGenerate.reason}`)
         console.log(`   Active keys: ${shouldGenerate.active_key_count}`)
-        console.log(`   Last generated: ${shouldGenerate.last_generated_seconds_ago}s ago`)
         
-        const waitMinutes = Math.ceil((300 - (shouldGenerate.last_generated_seconds_ago || 0)) / 60)
-        setError(`You generated an API key ${shouldGenerate.last_generated_seconds_ago} seconds ago. Please wait ${waitMinutes} more minute(s) before generating another key, or use your existing key from the extension.`)
+        setError(`You already have ${shouldGenerate.active_key_count} active API key(s). Please use your existing key, or go to the dashboard to manage your keys. If you lost your key, use the "Regenerate API Key" option in the dashboard.`)
         return
       }
 
-      console.log('✅ Generating new API key...')
+      console.log('✅ User has no keys, generating first API key...')
       const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
       const keyPrefix = 'sk_' // Just the prefix, not part of the random key
       const hashedKey = createHash('sha256').update(apiKey).digest('hex')

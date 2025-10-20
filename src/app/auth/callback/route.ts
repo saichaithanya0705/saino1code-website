@@ -11,7 +11,6 @@ type ShouldGenerateResult = {
   should_generate: boolean
   reason: string
   active_key_count: number
-  last_generated_seconds_ago: number | null
 }
 
 type KeyGenerationResult = {
@@ -36,11 +35,11 @@ export async function GET(request: Request) {
     // If this is a VS Code callback, generate API key and redirect
     if (isVSCodeCallback && data?.user) {
       try {
-        console.log('🔵 VS Code callback detected, checking if should generate API key...')
+        console.log('🔵 VS Code callback detected, checking if user needs API key...')
         
-        // Check if user already has a recent key (prevents duplicate generation)
+        // Check if user already has any active keys
         const { data: shouldGenerateDataRaw, error: checkError } = await supabase
-          .rpc('should_generate_new_key', { p_cooldown_minutes: 5 })
+          .rpc('should_generate_new_key')
           .single()
         
         if (checkError) {
@@ -51,24 +50,20 @@ export async function GET(request: Request) {
         const shouldGenerateData = shouldGenerateDataRaw as ShouldGenerateResult | null
 
         if (shouldGenerateData && !shouldGenerateData.should_generate) {
-          // User has a recent key - don't generate new one
+          // User already has active keys - don't generate new one
           console.log(`ℹ️  ${shouldGenerateData.reason}`)
           console.log(`   Active keys: ${shouldGenerateData.active_key_count}`)
-          console.log(`   Last generated: ${shouldGenerateData.last_generated_seconds_ago}s ago`)
           
-          // Show user-friendly message
-          const waitSeconds = (5 * 60) - (shouldGenerateData.last_generated_seconds_ago || 0)
-          const waitMinutes = Math.ceil(waitSeconds / 60)
-          
+          // Redirect to dashboard with message
           return NextResponse.redirect(
             `${requestUrl.origin}/login?` +
-            `error=recent_key_exists&` +
-            `wait=${waitMinutes}&` +
+            `error=has_active_keys&` +
+            `count=${shouldGenerateData.active_key_count}&` +
             `callback=vscode`
           )
         }
         
-        console.log('✅ Generating new API key...')
+        console.log('✅ User has no keys, generating first API key...')
         
         // Generate API key using smart_generate_api_key (keeps up to 3 active keys)
         const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
