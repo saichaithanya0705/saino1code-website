@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { createHash } from 'crypto'
 import { SPECIAL_USER_ID, SPECIAL_USER_EMAIL, ENABLE_SPECIAL_USER } from '@/config/special-user.config'
 
+// Mark this route as dynamic - it validates API keys dynamically
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 /**
  * API Key Validation Endpoint
  * 

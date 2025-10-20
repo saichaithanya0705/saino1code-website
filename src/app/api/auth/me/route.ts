@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+// Mark this route as dynamic - it uses cookies for authentication
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 /**
  * Get Current User Info
  * 
