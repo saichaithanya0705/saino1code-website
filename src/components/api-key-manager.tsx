@@ -56,7 +56,7 @@ export function ApiKeyManager({ apiKeyPrefix, initialApiKey = null }: ApiKeyMana
       </p>
       <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50 dark:bg-slate-800/50">
         <div className="font-mono text-sm">
-          {apiKeyPrefix ? `s1c_...${apiKeyPrefix.slice(-4)}` : "No key generated yet."}
+          {apiKeyPrefix ? `${apiKeyPrefix}...` : "No key generated yet."}
         </div>
         <AlertDialog>
           <AlertDialogTrigger asChild>
