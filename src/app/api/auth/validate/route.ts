@@ -11,7 +11,7 @@ import { SPECIAL_USER_ID, SPECIAL_USER_EMAIL, ENABLE_SPECIAL_USER } from '@/conf
  * 
  * Request:
  *   POST /api/auth/validate
- *   Headers: Authorization: Bearer s1c_...
+ *   Headers: Authorization: Bearer s1c_... OR x-api-key: s1c_...
  * 
  * Response:
  *   Success: { valid: true, user: { id, email, full_name, tier, plan } }
@@ -19,22 +19,29 @@ import { SPECIAL_USER_ID, SPECIAL_USER_EMAIL, ENABLE_SPECIAL_USER } from '@/conf
  */
 export async function POST(request: NextRequest) {
   try {
-    // Extract API key from Authorization header
+    // Extract API key from either Authorization header or x-api-key header
     const authHeader = request.headers.get('authorization')
+    const apiKeyHeader = request.headers.get('x-api-key')
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let apiKey: string | null = null
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      apiKey = authHeader.slice(7) // Remove 'Bearer ' prefix
+    } else if (apiKeyHeader) {
+      apiKey = apiKeyHeader
+    }
+    
+    if (!apiKey) {
       return NextResponse.json(
-        { error: 'Missing or invalid authorization header. Expected: Authorization: Bearer s1c_...' },
+        { error: 'Missing API key. Provide either Authorization: Bearer s1c_... or x-api-key: s1c_...' },
         { status: 401 }
       )
     }
 
-    const apiKey = authHeader.slice(7) // Remove 'Bearer ' prefix
-
-    // Validate API key format
-    if (!apiKey.startsWith('s1c_')) {
+    // Validate API key format (support both s1c_ and sk_ prefixes for compatibility)
+    if (!apiKey.startsWith('s1c_') && !apiKey.startsWith('sk_')) {
       return NextResponse.json(
-        { error: 'Invalid API key format. API keys must start with s1c_' },
+        { error: 'Invalid API key format. API keys must start with s1c_ or sk_' },
         { status: 401 }
       )
     }
@@ -160,7 +167,7 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, x-api-key',
     }
   })
 }

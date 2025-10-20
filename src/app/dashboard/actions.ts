@@ -16,9 +16,9 @@ export async function regenerateApiKey() {
     throw new Error("User not authenticated")
   }
 
-  // Generate a new API key
-  const apiKey = `s1c_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-  const keyPrefix = apiKey.slice(0, 6)
+  // Generate a new API key (sk_ prefix for SaiNo1Code)
+  const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
+  const keyPrefix = apiKey.slice(0, 5) // sk_ is 3 chars, but we store 5 to be consistent
 
   // Hash the key for secure storage
   const hashedKey = createHash('sha256').update(apiKey).digest('hex')

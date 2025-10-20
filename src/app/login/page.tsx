@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,14 +15,107 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Icons } from "@/components/icons"
+import { createHash } from "crypto"
 
-export default function LoginPage() {
+function LoginForm() {
   const supabase = createClient()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [githubLoading, setGithubLoading] = useState(false)
   const [microsoftLoading, setMicrosoftLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Check if this is a VS Code callback
+  const isVSCodeCallback = searchParams.get('callback') === 'vscode'
+
+  useEffect(() => {
+    // If user is already authenticated and this is a VS Code callback, redirect immediately
+    const checkAuthAndRedirect = async () => {
+      if (!isVSCodeCallback) return
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await handleVSCodeRedirect(user.id, user.email || '')
+      }
+    }
+
+    checkAuthAndRedirect()
+  }, [isVSCodeCallback])
+
+  const handleVSCodeRedirect = async (userId: string, email: string) => {
+    try {
+      console.log('🔵 Handling VS Code redirect for user:', email)
+      const { data: apiKeyData } = await supabase
+        .from('api_keys')
+        .select('key_prefix')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      let apiKey: string
+      
+      if (!apiKeyData) {
+        // Generate new API key
+        console.log('🔵 No API key found, generating new one...')
+        apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
+        const keyPrefix = apiKey.slice(0, 8)
+        const hashedKey = createHash('sha256').update(apiKey).digest('hex')
+
+        // Store the API key
+        const { error: insertError } = await supabase.rpc('transactional_regenerate_api_key', {
+          p_key_prefix: keyPrefix,
+          p_hashed_key: hashedKey,
+        })
+
+        if (insertError) {
+          console.error('❌ Failed to generate API key:', insertError)
+          setError('Failed to generate API key. Please try again.')
+          return
+        }
+      } else {
+        // User already has an API key, we need to fetch it
+        // Since we only store the hash, we need to generate a new one
+        console.log('🔵 User has existing API key, generating new one for security...')
+        apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
+        const keyPrefix = apiKey.slice(0, 8)
+        const hashedKey = createHash('sha256').update(apiKey).digest('hex')
+
+        const { error: updateError } = await supabase.rpc('transactional_regenerate_api_key', {
+          p_key_prefix: keyPrefix,
+          p_hashed_key: hashedKey,
+        })
+
+        if (updateError) {
+          console.error('❌ Failed to regenerate API key:', updateError)
+          setError('Failed to regenerate API key. Please try again.')
+          return
+        }
+      }
+
+      // Get user profile to determine tier
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('plan_name')
+        .eq('id', userId)
+        .single()
+
+      const tier = profile?.plan_name?.toLowerCase().includes('enterprise') ? 'enterprise' : 'individual'
+
+      // Construct the VS Code callback URL
+      const callbackUrl = `vscode://sainocode.sainocode-ai/auth?` +
+        `key=${encodeURIComponent(apiKey)}` +
+        `&email=${encodeURIComponent(email)}` +
+        `&tier=${encodeURIComponent(tier)}`
+
+      console.log('✅ Redirecting to VS Code with API key...')
+      
+      // Redirect to VS Code
+      window.location.href = callbackUrl
+    } catch (err) {
+      console.error('❌ Error handling VS Code redirect:', err)
+      setError('Failed to redirect to VS Code. Please try again.')
+    }
+  }
 
   const handleOAuthSignIn = async (provider: 'github' | 'google' | 'azure') => {
     try {
@@ -32,10 +126,15 @@ export default function LoginPage() {
       else if (provider === 'github') setGithubLoading(true)
       else if (provider === 'azure') setMicrosoftLoading(true)
 
+      // Construct redirect URL based on whether this is a VS Code callback
+      const redirectTo = isVSCodeCallback 
+        ? `${location.origin}/auth/callback?callback=vscode`
+        : `${location.origin}/auth/callback`
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${location.origin}/auth/callback`,
+          redirectTo,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -66,9 +165,14 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-[calc(100vh-10rem)]">
       <Card className="mx-auto max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardTitle className="text-2xl">
+            {isVSCodeCallback ? 'Sign in for VS Code' : 'Login'}
+          </CardTitle>
           <CardDescription>
-            Enter your email below to login to your account
+            {isVSCodeCallback 
+              ? 'Sign in to connect your VS Code extension'
+              : 'Enter your email below to login to your account'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -161,5 +265,23 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="container relative flex min-h-screen flex-col items-center justify-center">
+        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Loading...</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
