@@ -25,15 +25,16 @@ export async function GET(request: Request) {
       try {
         console.log('🔵 VS Code callback detected, generating API key...')
         
-        // Generate API key
+        // Generate API key using smart_generate_api_key (keeps up to 3 active keys)
         const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
         const keyPrefix = 'sk_' // Just the prefix, not part of the random key
         const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
-        // Store/update API key
-        const { error: keyError } = await supabase.rpc('transactional_regenerate_api_key', {
+        // Use smart_generate_api_key which keeps up to 3 keys active
+        const { error: keyError } = await supabase.rpc('smart_generate_api_key', {
           p_key_prefix: keyPrefix,
           p_hashed_key: hashedKey,
+          p_max_active_keys: 3
         })
 
         if (keyError) {
@@ -41,15 +42,37 @@ export async function GET(request: Request) {
           return NextResponse.redirect(`${requestUrl.origin}/login?error=api_key_failed&callback=vscode`)
         }
 
-        // Get user profile to determine tier
+        // Get user tier with graceful fallback
+        let tier = 'individual'
+        const email = data.user.email || ''
+        
+        // Try profiles table first
         const { data: profile } = await supabase
           .from('profiles')
-          .select('plan_name')
+          .select('plan_name, unlimited_access')
           .eq('id', data.user.id)
-          .single()
+          .maybeSingle()
 
-        const tier = profile?.plan_name?.toLowerCase().includes('enterprise') ? 'enterprise' : 'individual'
-        const email = data.user.email || ''
+        if (profile) {
+          if (profile.unlimited_access) {
+            tier = 'enterprise' // Unlimited access = enterprise features
+          } else if (profile.plan_name?.toLowerCase().includes('enterprise')) {
+            tier = 'enterprise'
+          } else if (profile.plan_name?.toLowerCase().includes('professional')) {
+            tier = 'professional'
+          }
+        } else {
+          // Fallback to user_tiers if profiles doesn't exist
+          const { data: tierData } = await supabase
+            .from('user_tiers')
+            .select('tier_name')
+            .eq('user_id', data.user.id)
+            .maybeSingle()
+          
+          if (tierData?.tier_name) {
+            tier = tierData.tier_name.toLowerCase()
+          }
+        }
 
         // Construct VS Code callback URL
         const vsCodeCallbackUrl = `vscode://sainocode.sainocode-ai/auth?` +
@@ -57,7 +80,7 @@ export async function GET(request: Request) {
           `&email=${encodeURIComponent(email)}` +
           `&tier=${encodeURIComponent(tier)}`
 
-        console.log('✅ Redirecting to VS Code...')
+        console.log(`✅ Redirecting to VS Code with tier: ${tier}`)
         
         // Redirect to VS Code
         return NextResponse.redirect(vsCodeCallbackUrl)

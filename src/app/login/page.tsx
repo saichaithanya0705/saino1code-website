@@ -46,60 +46,57 @@ function LoginForm() {
   const handleVSCodeRedirect = async (userId: string, email: string) => {
     try {
       console.log('🔵 Handling VS Code redirect for user:', email)
-      const { data: apiKeyData } = await supabase
-        .from('api_keys')
-        .select('key_prefix')
-        .eq('user_id', userId)
-        .maybeSingle()
-
-      let apiKey: string
       
-      if (!apiKeyData) {
-        // Generate new API key
-        console.log('🔵 No API key found, generating new one...')
-        apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-        const keyPrefix = 'sk_' // Just the prefix, not part of the random key
-        const hashedKey = createHash('sha256').update(apiKey).digest('hex')
+      // Generate API key using smart_generate_api_key (keeps up to 3 active keys)
+      // This prevents revoking keys on every login
+      console.log('🔵 Generating API key (keeps existing keys active)...')
+      const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
+      const keyPrefix = 'sk_' // Just the prefix, not part of the random key
+      const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
-        // Store the API key
-        const { error: insertError } = await supabase.rpc('transactional_regenerate_api_key', {
-          p_key_prefix: keyPrefix,
-          p_hashed_key: hashedKey,
-        })
+      // Use smart_generate_api_key which keeps up to 3 keys active
+      const { error: keyError } = await supabase.rpc('smart_generate_api_key', {
+        p_key_prefix: keyPrefix,
+        p_hashed_key: hashedKey,
+        p_max_active_keys: 3
+      })
 
-        if (insertError) {
-          console.error('❌ Failed to generate API key:', insertError)
-          setError('Failed to generate API key. Please try again.')
-          return
-        }
-      } else {
-        // User already has an API key, we need to fetch it
-        // Since we only store the hash, we need to generate a new one
-        console.log('🔵 User has existing API key, generating new one for security...')
-        apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-        const keyPrefix = 'sk_' // Just the prefix, not part of the random key
-        const hashedKey = createHash('sha256').update(apiKey).digest('hex')
-
-        const { error: updateError } = await supabase.rpc('transactional_regenerate_api_key', {
-          p_key_prefix: keyPrefix,
-          p_hashed_key: hashedKey,
-        })
-
-        if (updateError) {
-          console.error('❌ Failed to regenerate API key:', updateError)
-          setError('Failed to regenerate API key. Please try again.')
-          return
-        }
+      if (keyError) {
+        console.error('❌ Failed to generate API key:', keyError)
+        setError('Failed to generate API key. Please try again.')
+        return
       }
 
-      // Get user profile to determine tier
+      // Get user tier with graceful fallback
+      let tier = 'individual'
+      
+      // Try profiles table first
       const { data: profile } = await supabase
         .from('profiles')
-        .select('plan_name')
+        .select('plan_name, unlimited_access')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
-      const tier = profile?.plan_name?.toLowerCase().includes('enterprise') ? 'enterprise' : 'individual'
+      if (profile) {
+        if (profile.unlimited_access) {
+          tier = 'enterprise' // Unlimited access = enterprise features
+        } else if (profile.plan_name?.toLowerCase().includes('enterprise')) {
+          tier = 'enterprise'
+        } else if (profile.plan_name?.toLowerCase().includes('professional')) {
+          tier = 'professional'
+        }
+      } else {
+        // Fallback to user_tiers if profiles doesn't exist
+        const { data: tierData } = await supabase
+          .from('user_tiers')
+          .select('tier_name')
+          .eq('user_id', userId)
+          .maybeSingle()
+        
+        if (tierData?.tier_name) {
+          tier = tierData.tier_name.toLowerCase()
+        }
+      }
 
       // Construct the VS Code callback URL
       const callbackUrl = `vscode://sainocode.sainocode-ai/auth?` +
@@ -107,7 +104,7 @@ function LoginForm() {
         `&email=${encodeURIComponent(email)}` +
         `&tier=${encodeURIComponent(tier)}`
 
-      console.log('✅ Redirecting to VS Code with API key...')
+      console.log(`✅ Redirecting to VS Code with tier: ${tier}`)
       
       // Redirect to VS Code
       window.location.href = callbackUrl
