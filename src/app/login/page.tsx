@@ -1,7 +1,7 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
-import { useState, useEffect, Suspense } from "react"
+import { useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Icons } from "@/components/icons"
-import { createHash } from "crypto"
 
 function LoginForm() {
   const supabase = createClient()
@@ -25,136 +24,21 @@ function LoginForm() {
   const [githubLoading, setGithubLoading] = useState(false)
   const [microsoftLoading, setMicrosoftLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   // Check if this is a VS Code callback
   const isVSCodeCallback = searchParams.get('callback') === 'vscode'
-
-  useEffect(() => {
-    // If user is already authenticated and this is a VS Code callback, redirect immediately
-    const checkAuthAndRedirect = async () => {
-      if (!isVSCodeCallback) return
-
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await handleVSCodeRedirect(user.id, user.email || '')
-      }
-    }
-
-    checkAuthAndRedirect()
-  }, [isVSCodeCallback])
-
-  const handleVSCodeRedirect = async (userId: string, email: string) => {
-    try {
-      console.log('🔵 Handling VS Code redirect for user:', email)
-      
-      // Check if user already has any active keys
-      console.log('🔍 Checking if user needs API key...')
-      const { data: shouldGenerateRaw, error: checkError } = await supabase
-        .rpc('should_generate_new_key')
-        .maybeSingle()
-      
-      if (checkError) {
-        console.warn('⚠️  Could not check key status:', checkError)
-        // Continue anyway
-      }
-
-      const shouldGenerate = shouldGenerateRaw as any
-
-      if (shouldGenerate && !shouldGenerate.should_generate) {
-        // User already has active keys - don't generate new one
-        console.log(`ℹ️  ${shouldGenerate.reason}`)
-        console.log(`   Active keys: ${shouldGenerate.active_key_count}`)
-        
-        setError(`You already have ${shouldGenerate.active_key_count} active API key(s). Please use your existing key, or go to the dashboard to manage your keys. If you lost your key, use the "Regenerate API Key" option in the dashboard.`)
-        return
-      }
-
-      console.log('✅ User has no keys, generating first API key...')
-      const apiKey = `sk_${Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')}`
-      const keyPrefix = 'sk_' // Just the prefix, not part of the random key
-      const hashedKey = createHash('sha256').update(apiKey).digest('hex')
-
-      // Use smart_generate_api_key which keeps up to 3 keys active
-      const { data: keyResultRaw, error: keyError } = await supabase.rpc('smart_generate_api_key', {
-        p_key_prefix: keyPrefix,
-        p_hashed_key: hashedKey,
-        p_max_active_keys: 3
-      }).maybeSingle()
-
-      if (keyError) {
-        console.error('❌ Failed to generate API key:', keyError)
-        setError('Failed to generate API key. Please try again.')
-        return
-      }
-
-      const keyResult = keyResultRaw as any
-
-      if (keyResult && !keyResult.was_generated) {
-        console.log(`ℹ️  Key not generated: ${keyResult.message}`)
-        setError(keyResult.message)
-        return
-      }
-
-      console.log('✅ API key generated successfully')
-
-      // Get user tier with graceful fallback
-      let tier = 'individual'
-      
-      // Try profiles table first
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('plan_name, unlimited_access')
-        .eq('id', userId)
-        .maybeSingle()
-
-      if (profile) {
-        if (profile.unlimited_access) {
-          tier = 'enterprise' // Unlimited access = enterprise features
-        } else if (profile.plan_name?.toLowerCase().includes('enterprise')) {
-          tier = 'enterprise'
-        } else if (profile.plan_name?.toLowerCase().includes('professional')) {
-          tier = 'professional'
-        }
-      } else {
-        // Fallback to user_tiers if profiles doesn't exist
-        const { data: tierData } = await supabase
-          .from('user_tiers')
-          .select('tier_name')
-          .eq('user_id', userId)
-          .maybeSingle()
-        
-        if (tierData?.tier_name) {
-          tier = tierData.tier_name.toLowerCase()
-        }
-      }
-
-      // Construct the VS Code callback URL
-      const callbackUrl = `vscode://sainocode.sainocode-ai/auth?` +
-        `key=${encodeURIComponent(apiKey)}` +
-        `&email=${encodeURIComponent(email)}` +
-        `&tier=${encodeURIComponent(tier)}`
-
-      console.log(`✅ Redirecting to VS Code with tier: ${tier}`)
-      
-      // Redirect to VS Code
-      window.location.href = callbackUrl
-    } catch (err) {
-      console.error('❌ Error handling VS Code redirect:', err)
-      setError('Failed to redirect to VS Code. Please try again.')
-    }
-  }
 
   const handleOAuthSignIn = async (provider: 'github' | 'google' | 'azure') => {
     try {
       setError(null)
-      
+
       // Set loading state for specific provider
       if (provider === 'google') setGoogleLoading(true)
       else if (provider === 'github') setGithubLoading(true)
       else if (provider === 'azure') setMicrosoftLoading(true)
-
+      
       // Construct redirect URL based on whether this is a VS Code callback
-      const redirectTo = isVSCodeCallback 
+      const redirectTo = isVSCodeCallback
         ? `${location.origin}/auth/callback?callback=vscode`
         : `${location.origin}/auth/callback`
 
@@ -196,10 +80,9 @@ function LoginForm() {
             {isVSCodeCallback ? 'Sign in for VS Code' : 'Login'}
           </CardTitle>
           <CardDescription>
-            {isVSCodeCallback 
-              ? 'Sign in to connect your VS Code extension'
-              : 'Enter your email below to login to your account'
-            }
+            {isVSCodeCallback
+              ? 'Sign in to access your account. You can generate an API key from the dashboard after signing in.'
+              : 'Enter your email below to login to your account'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -246,8 +129,8 @@ function LoginForm() {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
-             <Button 
-              variant="outline" 
+             <Button
+              variant="outline"
               onClick={() => handleOAuthSignIn('github')}
               disabled={isLoading || githubLoading}
             >
@@ -258,8 +141,8 @@ function LoginForm() {
               )}
               GitHub
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => handleOAuthSignIn('google')}
               disabled={isLoading || googleLoading}
             >
@@ -270,8 +153,8 @@ function LoginForm() {
               )}
               Google
             </Button>
-             <Button 
-              variant="outline" 
+             <Button
+              variant="outline"
               onClick={() => handleOAuthSignIn('azure')}
               disabled={isLoading || microsoftLoading}
             >
