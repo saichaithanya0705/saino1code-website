@@ -7,13 +7,18 @@ import { CustomProviderKeyManager } from '@/components/custom-provider-key-manag
 import { DashboardTrialWrapper } from '@/components/dashboard-trial-wrapper'
 import { ProfileCard } from '@/components/profile-card'
 import { regenerateApiKey, generateApiKey } from './actions'
+import { VSCodeCallback } from '@/components/vscode-callback'
 
 // Mark this page as dynamic - it uses cookies for authentication
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export default async function DashboardPage() {
-  const supabase = createClient()
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { callback?: string; tier?: string; email?: string }
+}) {
+  const supabase = await createClient()
 
   const {
     data: { user },
@@ -21,6 +26,18 @@ export default async function DashboardPage() {
 
   if (!user) {
     return redirect('/login')
+  }
+
+  // Check if this is a VS Code callback
+  const isVSCodeCallback = searchParams.callback === 'vscode'
+  
+  if (isVSCodeCallback) {
+    // Return a component that handles VS Code redirection
+    return <VSCodeCallback 
+      email={searchParams.email || user.email || ''} 
+      tier={searchParams.tier || 'free'} 
+      userId={user.id}
+    />
   }
 
   // Fetch user profile, API key, and custom provider keys in parallel
