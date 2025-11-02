@@ -1,7 +1,10 @@
-﻿import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+﻿import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+
+// Mark this route as dynamic - it uses cookies for authentication
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -9,7 +12,7 @@ export async function GET(request: NextRequest) {
   const isVSCodeCallback = requestUrl.searchParams.get('callback') === 'vscode'
 
   if (code) {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     try {
       // Exchange code for session
