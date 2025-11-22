@@ -13,11 +13,11 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const supabase = await createClient()
-    
+
     try {
       // Exchange code for session
       const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-      
+
       if (error) {
         console.error(' Auth error:', error)
         return NextResponse.redirect(`${requestUrl.origin}/login?error=auth_failed`)
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       // Handle VS Code callback
       if (isVSCodeCallback) {
         console.log(` VS Code callback detected for ${email}`)
-        
+
         // Redirect to dashboard with VS Code callback flag
         // Users will manually generate API key from dashboard
         return NextResponse.redirect(

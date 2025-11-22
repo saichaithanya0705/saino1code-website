@@ -36,7 +36,7 @@ function LoginForm() {
       if (provider === 'google') setGoogleLoading(true)
       else if (provider === 'github') setGithubLoading(true)
       else if (provider === 'azure') setMicrosoftLoading(true)
-      
+
       // Construct redirect URL based on whether this is a VS Code callback
       const redirectTo = isVSCodeCallback
         ? `${location.origin}/auth/callback?callback=vscode`
@@ -129,7 +129,7 @@ function LoginForm() {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
-             <Button
+            <Button
               variant="outline"
               onClick={() => handleOAuthSignIn('github')}
               disabled={isLoading || githubLoading}
@@ -153,7 +153,7 @@ function LoginForm() {
               )}
               Google
             </Button>
-             <Button
+            <Button
               variant="outline"
               onClick={() => handleOAuthSignIn('azure')}
               disabled={isLoading || microsoftLoading}
