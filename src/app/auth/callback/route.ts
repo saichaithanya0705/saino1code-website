@@ -65,14 +65,16 @@ export async function GET(request: NextRequest) {
         const keyPrefix = apiKey.slice(0, 6)
         const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
-        // Store API key in database
+        // Store API key in database with email and tier
         const { error: keyError } = await supabase2
           .from('api_keys')
           .insert({
             user_id: data.user.id,
             key_prefix: keyPrefix,
             hashed_key: hashedKey,
-            is_active: true
+            is_active: true,
+            email: email,
+            tier: tier
           })
 
         if (keyError) {
