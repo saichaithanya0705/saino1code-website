@@ -27,6 +27,9 @@ function LoginForm() {
 
   // Check if this is a VS Code callback
   const isVSCodeCallback = searchParams.get('callback') === 'vscode'
+  const state = searchParams.get('state') || ''
+  const codeChallenge = searchParams.get('code_challenge') || ''
+  const codeChallengeMethod = searchParams.get('code_challenge_method') || ''
 
   const handleOAuthSignIn = async (provider: 'github' | 'google' | 'azure') => {
     try {
@@ -38,9 +41,20 @@ function LoginForm() {
       else if (provider === 'azure') setMicrosoftLoading(true)
 
       // Construct redirect URL based on whether this is a VS Code callback
-      const redirectTo = isVSCodeCallback
+      // Include state and PKCE parameters for VS Code OAuth flow
+      let redirectTo = isVSCodeCallback
         ? `${location.origin}/auth/callback?callback=vscode`
         : `${location.origin}/auth/callback`
+
+      if (isVSCodeCallback && state) {
+        redirectTo += `&state=${encodeURIComponent(state)}`
+        if (codeChallenge) {
+          redirectTo += `&code_challenge=${encodeURIComponent(codeChallenge)}`
+        }
+        if (codeChallengeMethod) {
+          redirectTo += `&code_challenge_method=${encodeURIComponent(codeChallengeMethod)}`
+        }
+      }
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,

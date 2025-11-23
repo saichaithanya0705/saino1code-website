@@ -39,4 +39,5 @@ src/config/special-user.config.ts
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+next-env.d.tsNUL
+NUL
