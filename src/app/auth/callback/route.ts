@@ -86,12 +86,16 @@ export async function GET(request: NextRequest) {
 
         console.log(' API key generated and stored')
 
-        // Redirect to VS Code with the API key as authorization code
-        // The extension will call /api/auth/vscode/token with this code
-        const vscodeRedirectUrl = `vscode://sainocode.sainocode-ai/auth/callback?code=${encodeURIComponent(apiKey)}&state=${encodeURIComponent(vscodeState)}`
+        // Redirect to success page which will open VS Code
+        // Browsers block direct redirects to custom URI schemes for security
+        const successUrl = new URL(`${requestUrl.origin}/auth/success`)
+        successUrl.searchParams.set('code', apiKey)
+        if (vscodeState) {
+          successUrl.searchParams.set('state', vscodeState)
+        }
 
-        console.log(' Redirecting to VS Code:', vscodeRedirectUrl.substring(0, 80) + '...')
-        return NextResponse.redirect(vscodeRedirectUrl)
+        console.log(' Redirecting to success page')
+        return NextResponse.redirect(successUrl.toString())
       }
 
       // Regular web login - redirect to dashboard
