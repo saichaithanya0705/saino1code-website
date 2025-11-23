@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function AuthSuccessPage() {
+// Mark this page as dynamic - it uses search params
+export const dynamic = 'force-dynamic'
+
+function AuthSuccessContent() {
   const searchParams = useSearchParams()
   const [vscodeUrl, setVscodeUrl] = useState<string>('')
   const [countdown, setCountdown] = useState(3)
@@ -152,5 +156,19 @@ export default function AuthSuccessPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AuthSuccessPage() {
+  return (
+    <Suspense fallback={<div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>Loading...</div>}>
+      <AuthSuccessContent />
+    </Suspense>
   )
 }

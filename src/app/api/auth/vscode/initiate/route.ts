@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Mark this route as dynamic - it uses query parameters
+export const dynamic = 'force-dynamic'
+
 /**
  * VS Code OAuth Initiation Endpoint
  * Redirects to login page with vscode callback parameter
