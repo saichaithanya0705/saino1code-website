@@ -3,6 +3,9 @@ import type { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import crypto from 'crypto'
 
+// Mark this route as dynamic
+export const dynamic = 'force-dynamic'
+
 /**
  * VS Code OAuth Token Refresh Endpoint
  * Refreshes an expired access token

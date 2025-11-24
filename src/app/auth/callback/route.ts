@@ -65,8 +65,16 @@ export async function GET(request: NextRequest) {
         const keyPrefix = apiKey.slice(0, 6)
         const hashedKey = createHash('sha256').update(apiKey).digest('hex')
 
+        console.log(' Generated API key details:')
+        console.log('   - Key prefix:', keyPrefix)
+        console.log('   - Key length:', apiKey.length)
+        console.log('   - Hash length:', hashedKey.length)
+        console.log('   - User ID:', data.user.id)
+        console.log('   - Email:', email)
+        console.log('   - Tier:', tier)
+
         // Store API key in database with email and tier
-        const { error: keyError } = await supabase2
+        const { data: insertData, error: keyError } = await supabase2
           .from('api_keys')
           .insert({
             user_id: data.user.id,
@@ -76,6 +84,7 @@ export async function GET(request: NextRequest) {
             email: email,
             tier: tier
           })
+          .select()
 
         if (keyError) {
           console.error(' Failed to store API key:', keyError)
@@ -84,7 +93,24 @@ export async function GET(request: NextRequest) {
           )
         }
 
-        console.log(' API key generated and stored')
+        console.log(' API key stored successfully in database')
+        console.log('   - Insert result:', insertData)
+
+        // Verify the key can be retrieved immediately
+        const { data: verifyData, error: verifyError } = await supabase2
+          .from('api_keys')
+          .select('key_prefix, is_active, email, tier')
+          .eq('key_prefix', keyPrefix)
+          .eq('hashed_key', hashedKey)
+          .single()
+
+        if (verifyError || !verifyData) {
+          console.error(' WARNING: Could not verify API key after insert!')
+          console.error('   - Verify error:', verifyError)
+          console.error('   - Verify data:', verifyData)
+        } else {
+          console.log(' API key verified successfully:', verifyData)
+        }
 
         // Redirect to success page which will open VS Code
         // Browsers block direct redirects to custom URI schemes for security
